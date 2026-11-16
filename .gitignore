@@ -1,0 +1,4 @@
+.DS_Store
+.claude/
+# Single-file copy used for the shared Claude page; not part of the hosted app
+negative-split.html
