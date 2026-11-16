@@ -398,35 +398,66 @@ function parseTime(str, mode) {
 }
 const radios = (name, items, val) => `<div class="seg" role="radiogroup">${items.map(([v, l]) => `<label><input type="radio" name="${name}" value="${v}"${String(v) === String(val) ? ' checked' : ''}><span>${l}</span></label>`).join('')}</div>`;
 
+/* ---------- setup form controls ---------- */
+const DISTS = [[0, 'None'], [5000, '5K'], [10000, '10K'], [21097.5, 'Half'], [42195, 'Full']];
+const GOALS = ['3:00', '3:30', '4:00', '4:30', '5:00'];
+const STEP = { 'f-age': [12, 90, 1], 'f-wt': [70, 440, 1], 'f-wk': [0, 150, 1], 'f-long': [0, 30, 1] };
+const CHEV = svg('<path d="M9 6l6 6-6 6"/>', 16, 2.4);
+
+const nextSunday = s => { let d = s; while (dUTC(d).getUTCDay() !== 0) d = addDays(d, 1); return d; };
+const weeksOut = n => nextSunday(addDays(today, n * 7));
+const segBox = (id, val, label, max, extra = '') => `<label class="tseg"${extra}><input id="${id}" inputmode="numeric" pattern="[0-9]*" maxlength="${max}" autocomplete="off" enterkeyhint="next" value="${val}" aria-label="${label}"><small>${label}</small></label>`;
+const stepper = (id, label, val, unit = '') => `<div class="fr"><span id="l-${id}">${label}</span><div class="step"><button type="button" class="sbtn" data-step="${id}" data-d="-1" aria-label="Less">−</button><input id="${id}" inputmode="numeric" pattern="[0-9]*" autocomplete="off" enterkeyhint="next" value="${val}" aria-labelledby="l-${id}"><button type="button" class="sbtn" data-step="${id}" data-d="1" aria-label="More">+</button>${unit ? `<span class="u">${unit}</span>` : ''}</div></div>`;
+
 function openSetup() {
   const p = S.profile, totIn = Math.round(p.heightCm / 2.54), g = Math.round(p.goalSec / 60);
-  const rd = [5000, 10000, 21097.5, 42195].find(x => Math.abs(x - (p.recentDist || 0)) < 1) || 0;
+  const rd = DISTS.map(d => d[0]).find(x => x && Math.abs(x - (p.recentDist || 0)) < 1) || 0;
+  const rs = Math.round(p.recentSec || 0);
+  const raceDate = p.raceDate > today ? p.raceDate : weeksOut(16);
   $('#ss .sheet').innerHTML = `
     <form id="setup" novalidate>
       <div class="grab" data-drag><span></span></div>
       <div class="bar-top" data-drag><button type="button" class="tbtn" data-close>Cancel</button><h2 id="ss-title">Your plan</h2><button type="submit" class="tbtn strong">Save</button></div>
       <div class="sheet-body">
         <p class="form-err" id="ferr" role="alert" hidden></p>
+
         <h3 class="grp-h">Goal</h3>
         <div class="grp">
-          <label class="fr"><span>Goal time</span><div class="ctl"><input id="f-goal" inputmode="decimal" autocomplete="off" placeholder="3:30" value="${Math.floor(g / 60)}:${pad(g % 60)}"><span class="u">h:mm</span></div></label>
-          <label class="fr"><span>Race date</span><input id="f-date" type="date" value="${esc(p.raceDate)}"></label>
+          <div class="fblock" id="b-goal">
+            <div class="fb-head"><span id="l-goal">Goal time</span><span class="fb-aside num" id="goal-pace"></span></div>
+            <div class="tbox" role="group" aria-labelledby="l-goal">${segBox('f-gh', Math.floor(g / 60), 'hours', 1)}<span class="tcolon">:</span>${segBox('f-gm', pad(g % 60), 'min', 2)}</div>
+            <div class="chips" role="group" aria-label="Common goals">${GOALS.map(t => `<button type="button" class="chip" data-goal="${t}">${t}</button>`).join('')}</div>
+          </div>
+          <div class="fblock" id="b-date">
+            <button type="button" class="fr-btn" id="date-toggle" aria-expanded="false" aria-controls="cal"><span>Race date</span><span class="fr-val"><b id="date-label"></b><small id="date-weeks"></small></span><span class="chev">${CHEV}</span></button>
+            <div class="cal" id="cal" hidden></div>
+            <input type="hidden" id="f-date" value="${esc(raceDate)}">
+          </div>
         </div>
+
         <h3 class="grp-h">You</h3>
         <div class="grp">
-          <label class="fr"><span>Name</span><input id="f-name" autocomplete="given-name" placeholder="Optional" value="${esc(p.name || '')}"></label>
-          <label class="fr"><span>Age</span><input id="f-age" inputmode="numeric" value="${p.age}"></label>
-          <div class="fr"><span>Height</span><div class="ctl"><input id="f-ft" class="short" inputmode="numeric" aria-label="Height, feet" value="${Math.floor(totIn / 12)}"><span class="u">ft</span><input id="f-in" class="short" inputmode="numeric" aria-label="Height, inches" value="${totIn % 12}"><span class="u">in</span></div></div>
-          <label class="fr"><span>Weight</span><div class="ctl"><input id="f-wt" inputmode="decimal" value="${Math.round(p.weightKg * LB)}"><span class="u">lb</span></div></label>
+          <label class="fr"><span>Name</span><input id="f-name" autocomplete="given-name" autocapitalize="words" enterkeyhint="next" placeholder="Optional" value="${esc(p.name || '')}"></label>
+          ${stepper('f-age', 'Age', p.age)}
+          <div class="fr" id="b-ht"><span id="l-ht">Height</span><div class="minis" role="group" aria-labelledby="l-ht"><label class="mini"><input id="f-ft" inputmode="numeric" pattern="[0-9]*" maxlength="1" autocomplete="off" enterkeyhint="next" value="${Math.floor(totIn / 12)}" aria-label="Feet"><small>ft</small></label><label class="mini"><input id="f-in" inputmode="numeric" pattern="[0-9]*" maxlength="2" autocomplete="off" enterkeyhint="next" value="${totIn % 12}" aria-label="Inches"><small>in</small></label></div></div>
+          ${stepper('f-wt', 'Weight', Math.round(p.weightKg * LB), 'lb')}
         </div>
+
         <h3 class="grp-h">Running now</h3>
         <div class="grp">
-          <label class="fr"><span>Recent race</span><select id="f-rdist"><option value="0"${!rd ? ' selected' : ''}>None</option><option value="5000"${rd === 5000 ? ' selected' : ''}>5K</option><option value="10000"${rd === 10000 ? ' selected' : ''}>10K</option><option value="21097.5"${rd === 21097.5 ? ' selected' : ''}>Half marathon</option><option value="42195"${rd === 42195 ? ' selected' : ''}>Marathon</option></select></label>
-          <label class="fr" id="r-rtime"${rd ? '' : ' hidden'}><span>Race time</span><input id="f-rtime" inputmode="decimal" autocomplete="off" placeholder="47:30" value="${rd && p.recentSec ? hms(p.recentSec) : ''}"></label>
-          <label class="fr"><span>Miles per week</span><input id="f-wk" inputmode="decimal" value="${Math.round((p.weeklyKm || 0) / MI)}"></label>
-          <label class="fr"><span>Longest recent run</span><div class="ctl"><input id="f-long" inputmode="decimal" value="${Math.round((p.longestKm || 0) / MI)}"><span class="u">mi</span></div></label>
+          <div class="fblock" id="b-race">
+            <div class="fb-head"><span>Recent race</span><span class="fb-aside">last 6 weeks</span></div>
+            ${radios('f-rdist', DISTS, rd)}
+            <div id="rtime-wrap"${rd ? '' : ' hidden'}>
+              <div class="tbox" role="group" aria-label="Race time">${segBox('f-rh', Math.floor(rs / 3600), 'hours', 1, ' id="rh-seg"')}<span class="tcolon" id="rh-colon">:</span>${segBox('f-rm', pad(Math.floor(rs % 3600 / 60)), 'min', 2)}<span class="tcolon">:</span>${segBox('f-rs', pad(rs % 60), 'sec', 2)}</div>
+            </div>
+            <p class="hint-line" id="race-hint"></p>
+          </div>
+          ${stepper('f-wk', 'Miles per week', Math.round((p.weeklyKm || 0) / MI), 'mi')}
+          ${stepper('f-long', 'Longest recent run', Math.round((p.longestKm || 0) / MI), 'mi')}
           <div class="fr stack"><span>Marathons finished</span>${radios('f-exp', [['new', 'None'], ['mid', '1–2'], ['adv', '3+']], p.exp)}</div>
         </div>
+
         <h3 class="grp-h">Schedule</h3>
         <div class="grp">
           <div class="fr stack"><span>Run days per week</span>${radios('f-days', [[3, '3'], [4, '4'], [5, '5'], [6, '6'], [7, '7']], p.days)}</div>
@@ -435,38 +466,156 @@ function openSetup() {
       </div>
       <div class="sheet-foot"><button type="submit" class="btn">Build my plan</button></div>
     </form>`;
-  $('#f-rdist').addEventListener('change', e => { $('#r-rtime').hidden = e.target.value === '0'; if (e.target.value !== '0') $('#f-rtime').focus(); });
-  $('#setup').addEventListener('submit', saveSetup);
+  bindSetup(raceDate);
   openLayer($('#ss'));
 }
+
+function bindSetup(raceDate) {
+  const f = $('#setup');
+  let calMonth = raceDate.slice(0, 7);
+
+  /* goal time */
+  const goalSec = () => (parseInt($('#f-gh').value, 10) || 0) * 3600 + (parseInt($('#f-gm').value, 10) || 0) * 60;
+  const updGoal = () => {
+    const s = goalSec();
+    $('#goal-pace').textContent = s >= 2 * 3600 && s <= 7 * 3600 ? `${pace(s / 42.195)} /mi` : '';
+    $$('[data-goal]', f).forEach(c => c.classList.toggle('on', parseTime(c.dataset.goal, 'h') === s));
+  };
+
+  /* race date + calendar */
+  const updDate = () => {
+    const d = $('#f-date').value, days = between(today, d), w = Math.floor(days / 7);
+    $('#date-label').textContent = fmt(d, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+    $('#date-weeks').textContent = days < 14 ? `${days} days away` : `${w} weeks away${w < 12 ? ' · short build' : ''}`;
+  };
+  const drawCal = () => {
+    const [y, m] = calMonth.split('-').map(Number), sel = $('#f-date').value;
+    const first = `${calMonth}-01`, lead = (dUTC(first).getUTCDay() + 6) % 7, dim = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    const minM = today.slice(0, 7), maxM = addDays(today, 730).slice(0, 7);
+    const cells = Array.from({ length: lead }, () => '<span></span>').concat(Array.from({ length: dim }, (_, i) => {
+      const d = `${calMonth}-${pad(i + 1)}`, dow = (lead + i) % 7, off = d <= today || d > addDays(today, 730);
+      return `<button type="button" class="cd${d === sel ? ' sel' : ''}${d === today ? ' today' : ''}${dow >= 5 ? ' wkend' : ''}" data-cal="${d}"${off ? ' disabled' : ''} aria-pressed="${d === sel}" aria-label="${fmt(d, { weekday: 'long', month: 'long', day: 'numeric' })}">${i + 1}</button>`;
+    }));
+    $('#cal').innerHTML = `
+      <div class="cal-h"><button type="button" class="cal-nav" data-month="-1" aria-label="Previous month"${calMonth <= minM ? ' disabled' : ''}>${svg('<path d="M15 6l-6 6 6 6"/>', 16, 2.4)}</button><b>${dUTC(first).toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' })}</b><button type="button" class="cal-nav" data-month="1" aria-label="Next month"${calMonth >= maxM ? ' disabled' : ''}>${CHEV}</button></div>
+      <div class="cal-grid" id="cal-grid">${['M', 'T', 'W', 'T', 'F', 'S', 'S'].map(x => `<small>${x}</small>`).join('')}${cells.join('')}</div>
+      <div class="chips" role="group" aria-label="Weeks from now">${[12, 16, 20].map(n => `<button type="button" class="chip${weeksOut(n) === sel ? ' on' : ''}" data-weeks="${n}">${n} weeks</button>`).join('')}</div>`;
+  };
+  const moveMonth = k => {
+    const [y, m] = calMonth.split('-').map(Number), d = new Date(Date.UTC(y, m - 1 + k, 1));
+    const nm = d.toISOString().slice(0, 7);
+    if (nm < today.slice(0, 7) || nm > addDays(today, 730).slice(0, 7)) return;
+    calMonth = nm; drawCal();
+  };
+  const setDate = d => { $('#f-date').value = d; calMonth = d.slice(0, 7); updDate(); drawCal(); clearBad($('#b-date')); };
+
+  /* recent race */
+  const raceSec = () => (parseInt($('#f-rh').value, 10) || 0) * 3600 + (parseInt($('#f-rm').value, 10) || 0) * 60 + (parseInt($('#f-rs').value, 10) || 0);
+  const updRace = () => {
+    const dist = +($('input[name="f-rdist"]:checked', f)?.value || 0), long = dist >= 21000;
+    $('#rtime-wrap').hidden = !dist;
+    $('#rh-seg').hidden = $('#rh-colon').hidden = !long;
+    if (!long) $('#f-rh').value = '0';
+    const s = raceSec(), V = dist && s ? Engine.vdot(dist, s) : 0;
+    $('#race-hint').textContent = !dist ? 'No race? Week 2 has a 5K time trial to set your paces.'
+      : V >= 15 && V <= 90 ? `Predicts ${hms(Engine.raceTime(42195, V))} for a marathon today` : 'Enter your finish time';
+  };
+
+  /* typing behaviour for the boxed number fields */
+  $$('.tseg input, .mini input, .step input', f).forEach(inp => {
+    inp.addEventListener('focus', () => setTimeout(() => { try { inp.setSelectionRange(0, inp.value.length); } catch (_) {} }, 0));
+    inp.addEventListener('input', () => {
+      inp.value = inp.value.replace(/\D/g, '');
+      const ml = +inp.getAttribute('maxlength');
+      if (ml && inp.value.length >= ml) focusNext(inp);
+      clearBad(inp.closest('.fblock, .fr'));
+      updGoal(); updRace();
+    });
+  });
+  ['f-gm', 'f-rm', 'f-rs'].forEach(id => $('#' + id).addEventListener('blur', e => { const v = parseInt(e.target.value, 10); e.target.value = pad(isNaN(v) ? 0 : Math.min(59, v)); updGoal(); updRace(); }));
+  $('#f-in').addEventListener('blur', e => { const v = parseInt(e.target.value, 10); e.target.value = String(isNaN(v) ? 0 : Math.min(11, v)); });
+
+  /* steppers: tap or hold */
+  $$('.sbtn', f).forEach(b => {
+    const inp = $('#' + b.dataset.step), [lo, hi, st] = STEP[b.dataset.step], d = +b.dataset.d;
+    const bump = () => { const v = clamp((parseInt(inp.value, 10) || 0) + d * st, lo, hi); inp.value = v; clearBad(inp.closest('.fr')); };
+    let t1, t2;
+    const stop = () => { clearTimeout(t1); clearInterval(t2); };
+    b.addEventListener('pointerdown', e => { e.preventDefault(); bump(); t1 = setTimeout(() => { t2 = setInterval(bump, 70); }, 380); });
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => b.addEventListener(ev, stop));
+    b.addEventListener('click', e => { if (e.detail === 0) bump(); });
+  });
+
+  /* clicks inside the form */
+  f.addEventListener('click', e => {
+    let el;
+    if ((el = e.target.closest('[data-goal]'))) { const [h, m] = el.dataset.goal.split(':'); $('#f-gh').value = h; $('#f-gm').value = m; clearBad($('#b-goal')); return updGoal(); }
+    if (e.target.closest('#date-toggle')) { const c = $('#cal'), open = c.hidden; c.hidden = !open; $('#date-toggle').setAttribute('aria-expanded', open); if (open) { drawCal(); setTimeout(() => revealIn(c), 30); } return; }
+    if ((el = e.target.closest('[data-cal]'))) return setDate(el.dataset.cal);
+    if ((el = e.target.closest('[data-month]'))) return moveMonth(+el.dataset.month);
+    if ((el = e.target.closest('[data-weeks]'))) return setDate(weeksOut(+el.dataset.weeks));
+  });
+  f.addEventListener('change', e => { if (e.target.name === 'f-rdist') { updRace(); clearBad($('#b-race')); if (e.target.value !== '0') setTimeout(() => ($('#f-rm')).focus(), 50); } });
+
+  /* swipe the calendar to change month */
+  let cx = null;
+  $('#cal').addEventListener('pointerdown', e => { if (e.target.closest('.cal-grid')) cx = [e.clientX, e.clientY]; });
+  $('#cal').addEventListener('pointerup', e => {
+    if (!cx) return; const dx = e.clientX - cx[0], dy = e.clientY - cx[1]; cx = null;
+    if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy) * 1.4) { moveMonth(dx < 0 ? 1 : -1); $('#cal')._swiped = performance.now(); }
+  });
+  $('#cal').addEventListener('click', e => { if ($('#cal')._swiped && performance.now() - $('#cal')._swiped < 300) e.stopPropagation(); }, true);
+
+  /* Return moves to the next field; on the last one it closes the keyboard */
+  f.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.matches('input:not([type=radio])')) { e.preventDefault(); focusNext(e.target); } });
+
+  f.addEventListener('submit', saveSetup);
+  updGoal(); updDate(); updRace();
+}
+
+function focusNext(inp) {
+  const all = $$('#setup input:not([type=hidden]):not([type=radio])').filter(x => !x.closest('[hidden]'));
+  const nx = all[all.indexOf(inp) + 1];
+  if (nx) nx.focus(); else inp.blur();
+}
+function revealIn(el) {
+  const body = el.closest('.sheet-body'); if (!body) return;
+  const r = el.getBoundingClientRect(), br = body.getBoundingClientRect();
+  if (r.top < br.top + 12 || r.bottom > br.bottom - 12) body.scrollTo({ top: body.scrollTop + r.top - br.top - Math.max(16, (br.height - Math.min(r.height, br.height)) / 3), behavior: reduceMotion() ? 'auto' : 'smooth' });
+}
+const clearBad = el => { if (el) el.classList.remove('bad'); };
 
 function saveSetup(e) {
   e.preventDefault();
   const sh = $('#ss .sheet');
   if (sh._dragEnd && performance.now() - sh._dragEnd < 350) return;
-  const v = id => $('#' + id).value.trim(), rad = n => $(`#setup input[name="${n}"]:checked`)?.value;
-  const err = m => { const el = $('#ferr'); el.textContent = m; el.hidden = false; $('#ss .sheet-body').scrollTo({ top: 0, behavior: reduceMotion() ? 'auto' : 'smooth' }); };
-  const goalSec = parseTime(v('f-goal'), 'h');
-  if (!(goalSec >= 2 * 3600 && goalSec <= 7 * 3600)) return err('Enter a goal time between 2:00 and 7:00, like 3:30.');
+  const v = id => $('#' + id).value.trim(), num = id => parseInt(v(id), 10) || 0, rad = n => $(`#setup input[name="${n}"]:checked`)?.value;
+  $$('#setup .bad').forEach(x => x.classList.remove('bad'));
+  const err = (m, blockId) => {
+    const el = $('#ferr'); el.textContent = m; el.hidden = false;
+    const b = blockId && $('#' + blockId)?.closest('.fblock, .fr'); if (b) { b.classList.add('bad'); setTimeout(() => revealIn(b), 30); }
+    else $('#ss .sheet-body').scrollTo({ top: 0, behavior: reduceMotion() ? 'auto' : 'smooth' });
+  };
+  const goalSec = num('f-gh') * 3600 + num('f-gm') * 60;
+  if (!(goalSec >= 2 * 3600 && goalSec <= 7 * 3600)) return err('Enter a goal time between 2:00 and 7:00.', 'b-goal');
   const raceDate = v('f-date');
-  if (!raceDate || raceDate <= today) return err('Pick a race date after today.');
-  const age = parseInt(v('f-age'), 10);
-  if (!(age >= 12 && age <= 90)) return err('Enter an age between 12 and 90.');
-  const heightCm = ((parseFloat(v('f-ft')) || 0) * 12 + (parseFloat(v('f-in')) || 0)) * 2.54;
-  if (!(heightCm >= 120 && heightCm <= 230)) return err('Enter a height between 4 ft and 7 ft 6 in.');
-  const lb = parseFloat(v('f-wt'));
-  if (!(lb >= 70 && lb <= 440)) return err('Enter a weight between 70 and 440 lb.');
-  const rdist = parseFloat(v('f-rdist')) || 0;
+  if (!raceDate || raceDate <= today) return err('Pick a race date after today.', 'b-date');
+  const age = num('f-age');
+  if (!(age >= 12 && age <= 90)) return err('Enter an age between 12 and 90.', 'l-f-age');
+  const heightCm = (num('f-ft') * 12 + num('f-in')) * 2.54;
+  if (!(heightCm >= 120 && heightCm <= 230)) return err('Enter a height between 4 ft and 7 ft 6 in.', 'b-ht');
+  const lb = num('f-wt');
+  if (!(lb >= 70 && lb <= 440)) return err('Enter a weight between 70 and 440 lb.', 'l-f-wt');
+  const rdist = +(rad('f-rdist') || 0);
   let rsec = 0;
   if (rdist) {
-    rsec = parseTime(v('f-rtime'), rdist >= 21000 ? 'auto' : 'm');
+    rsec = num('f-rh') * 3600 + num('f-rm') * 60 + num('f-rs');
     const V = rsec ? Engine.vdot(rdist, rsec) : 0;
-    if (!(V >= 15 && V <= 90)) return err(v('f-rtime') ? "That race time doesn't look right. Try 47:30 or 1:45:00." : 'Enter your race time, or set Recent race to None.');
+    if (!(V >= 15 && V <= 90)) return err(rsec ? "That race time doesn't look right for the distance." : 'Enter your race time, or choose None.', 'b-race');
   }
-  const wk = parseFloat(v('f-wk') || '0');
-  if (!(wk >= 0 && wk <= 150)) return err('Enter your miles per week, from 0 to 150.');
-  const lg = parseFloat(v('f-long') || '0');
-  if (!(lg >= 0 && lg <= 30)) return err('Enter your longest recent run, from 0 to 30 miles.');
+  const wk = num('f-wk'), lg = num('f-long');
+  if (!(wk >= 0 && wk <= 150)) return err('Enter your miles per week, from 0 to 150.', 'l-f-wk');
+  if (!(lg >= 0 && lg <= 30)) return err('Enter your longest recent run, from 0 to 30 miles.', 'l-f-long');
   S.profile = {
     example: false, name: v('f-name').slice(0, 40), age, sex: S.profile.sex || 'm', heightCm: Math.round(heightCm), weightKg: Math.round(lb / LB * 10) / 10,
     restHr: 0, maxHr: 0, goalSec, raceDate, recentDist: rdist, recentSec: rsec, weeklyKm: wk * MI, longestKm: lg * MI,
@@ -476,6 +625,27 @@ function saveSetup(e) {
   closeLayer($('#ss'));
   toast('Plan updated');
 }
+
+/* ---------- keyboard: keep sheets inside the visible area above the iPhone keyboard ---------- */
+(function trackKeyboard() {
+  const vv = window.visualViewport, root = document.documentElement;
+  if (!vv) return;
+  const typing = () => { const a = document.activeElement; return !!a && (a.tagName === 'TEXTAREA' || (a.tagName === 'INPUT' && !/^(radio|checkbox|button|submit|hidden)$/.test(a.type))); };
+  const upd = () => {
+    root.style.setProperty('--vv-top', `${vv.offsetTop}px`);
+    root.style.setProperty('--vv-h', `${vv.height}px`);
+    root.classList.toggle('kb', typing() && window.innerHeight - vv.height > 140);
+  };
+  vv.addEventListener('resize', upd);
+  vv.addEventListener('scroll', upd);
+  document.addEventListener('focusin', e => {
+    upd();
+    const el = e.target;
+    if (el.matches?.('.sheet-body input')) setTimeout(() => { upd(); revealIn(el.closest('.tbox, .fr, .fblock') || el); }, 320);
+  });
+  document.addEventListener('focusout', () => setTimeout(upd, 60));
+  upd();
+})();
 
 /* ---------- navigation ---------- */
 function show(name, fromHash) {
