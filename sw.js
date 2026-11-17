@@ -1,6 +1,6 @@
 /* Negative Split service worker.
    Bump VERSION whenever you change any app file so phones pick up the update. */
-const VERSION = 'v4';
+const VERSION = 'v5';
 const APP = `negsplit-app-${VERSION}`;
 const FONTS = 'negsplit-fonts';
 const SHELL = ['./', 'index.html', 'styles.css', 'engine.js', 'app.js', 'manifest.webmanifest',

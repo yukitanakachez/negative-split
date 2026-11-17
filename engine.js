@@ -97,8 +97,10 @@ const Engine = (() => {
 
     // --- fitness
     const goalV = vdot(MAR, p.goalSec);
+    // A logged 5K time trial (p.tt) is the freshest fitness signal, so it overrides the setup race.
     const hasRecent = p.recentDist > 0 && p.recentSec > 0;
-    const curV = hasRecent ? vdot(p.recentDist, p.recentSec) : null;
+    const fit = p.tt && p.tt.sec > 0 ? { d: 5000, s: p.tt.sec } : hasRecent ? { d: p.recentDist, s: p.recentSec } : null;
+    const curV = fit ? vdot(fit.d, fit.s) : null;
     const gpw = { new: 0.30, mid: 0.20, adv: 0.12 }[p.exp] ?? 0.2;
     const gain = gpw * Math.max(0, weeks - 2);
     let startV, targetV, feas;
@@ -107,7 +109,7 @@ const Engine = (() => {
       targetV = curV >= goalV ? curV : Math.min(goalV, curV + gain);
       const gap = goalV - curV;
       const level = gap <= 0 ? 'ready' : gap <= gain ? 'achievable' : gap <= gain * 1.5 ? 'stretch' : 'aggressive';
-      feas = { level, gap, gain, gpw, curPred: raceTime(MAR, curV), suggest: raceTime(MAR, curV + gain), riegel: riegel(p.recentDist, p.recentSec, MAR) };
+      feas = { level, gap, gain, gpw, curPred: raceTime(MAR, curV), suggest: raceTime(MAR, curV + gain), riegel: riegel(fit.d, fit.s, MAR) };
     } else {
       startV = goalV - 1.5; targetV = goalV;
       feas = { level: 'unknown', gain, gpw };

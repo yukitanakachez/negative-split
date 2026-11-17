@@ -284,3 +284,15 @@ img { max-width: 100%; }
 /* while the keyboard is up: give the sheet the whole visible area and drop the big button (Save stays in the header) */
 .kb .sheet-foot { display: none; }
 .kb .sheet.tall { height: calc(100% - 6px); }
+
+/* ---------- race split paces ---------- */
+.tile b em { font-size: 13px; font-weight: 500; color: var(--muted); }
+
+/* ---------- 5K time trial entry ---------- */
+.tt-log { display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 28px; background: var(--card); }
+.tt-head { display: flex; flex-direction: column; gap: 1px; padding: 0 4px; }
+.tt-head b { font-size: 16px; font-weight: 600; }
+.tt-head small { font-size: 12.5px; color: var(--muted); }
+.tt-log.bad .tseg { border-color: color-mix(in oklch, var(--orange) 45%, transparent); }
+.tt-err { font-size: 13px; color: var(--orange-deep); padding: 0 4px; }
+.r-val small.lap { margin-top: 3px; padding: 1px 8px; border-radius: 999px; background: var(--bg); color: var(--ink); font-weight: 500; white-space: nowrap; }

@@ -18,7 +18,9 @@ function defaultRace() { const d = new Date(); d.setDate(d.getDate() + 126); whi
 const EXAMPLE = { example: true, name: '', age: 19, sex: 'm', heightCm: 178, weightKg: 68, restHr: 0, maxHr: 0, goalSec: 3.5 * 3600, raceDate: defaultRace(), recentDist: 10000, recentSec: 47 * 60 + 30, weeklyKm: 22 * MI, longestKm: 10 * MI, exp: 'mid', days: 5, longDay: 6, units: 'mi' };
 
 let S = { profile: null, log: {} };
-function load() { try { const j = JSON.parse(localStorage.getItem(KEY) || 'null'); if (j && j.profile) S = Object.assign({ log: {} }, j); } catch (e) {} if (!S.profile) S.profile = Object.assign({}, EXAMPLE); }
+function load() { try { const j = JSON.parse(localStorage.getItem(KEY) || 'null'); if (j && j.profile) S = Object.assign({ log: {} }, j); } catch (e) {} if (!S.profile) S.profile = Object.assign({}, EXAMPLE);
+  // Older saves had no start anchor, so the plan restarted every week. Pin it to the first open after updating.
+  if (!S.profile.example && !S.profile.from) { S.profile.from = localISO(); save(); } }
 function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
 
 /* ---------- formatting: miles ---------- */
@@ -75,21 +77,20 @@ function stepRows(d, P) {
     if (z === 'W') rows.push({ k: 'E', p: 22, c: 'blue', t: `${miles(s.km)} mi`, sub: i === 0 ? 'Warm-up' : 'Cool-down', v: pace(P.E[1]), u: 'per mile' });
     else if (z === 'E') rows.push({ k: 'E', p: EFF.E, c: 'blue', t: `${miles(s.km)} mi`, sub: long ? 'Long and relaxed' : 'Easy', v: `${pace(P.E[0])}–${pace(P.E[1])}`, u: 'per mile' });
     else if (z === 'RACE') rows.push({ k: 'M', p: 100, c: '', t: '26.2 mi', sub: 'Race · start even, finish strong', v: pace(P.M), u: 'per mile' });
-    else if (z === 'TT') rows.push({ k: 'I', p: 100, c: '', t: '5K time trial', sub: 'All out · then enter the time in Edit', v: '', u: '' });
+    else if (z === 'TT') rows.push({ k: 'I', p: 100, c: '', t: '5K time trial', sub: S.profile.tt && S.profile.tt.date === d.date ? 'Logged · paces updated' : 'All out · log your time below', v: S.profile.tt && S.profile.tt.date === d.date ? mss(S.profile.tt.sec) : '', u: 'your time' });
     else if (s.reps && s.timed) rows.push({ k: z, p: EFF[z], c: '', t: `${s.reps} × ${s.timed} s`, sub: s.hill ? 'Uphill · jog back down' : 'Fast · 1 min easy between', v: s.hill ? 'hard' : pace(P[z]), u: s.hill ? 'effort' : 'per mile' });
     else if (s.reps) {
       const isMile = Math.abs(s.repKm - MI) < 0.01, rep = isMile ? '1 mi' : `${Math.round(s.repKm * 1000)} m`;
       const rest = s.restSec ? `${Math.round(s.restSec / 60)} min rest` : s.repKm <= 0.4 ? `${rep} jog` : `${Math.round(s.jogSec / 60)} min jog`;
-      rows.push(isMile
-        ? { k: z, p: EFF[z], c: '', t: `${s.reps} × ${rep}`, sub: `${ZNAME[z]} · ${rest}`, v: pace(P[z]), u: 'per mile' }
-        : { k: z, p: EFF[z], c: '', t: `${s.reps} × ${rep}`, sub: `${ZNAME[z]} · ${rest}`, v: mss(P[z] * s.repKm), u: 'each rep' });
+      // On a track, laps are what you check: show the 400 m split for reps of 800 m and up.
+      rows.push({ k: z, p: EFF[z], c: '', t: `${s.reps} × ${rep}`, sub: `${ZNAME[z]} · ${rest}`, v: mss(P[z] * s.repKm), u: 'each rep', lap: s.repKm >= 0.79 ? `${mss(P[z] * 0.4)} per lap` : '' });
     } else rows.push({ k: z, p: EFF[z], c: '', t: `${miles(s.km)} mi`, sub: s.label === 'finish at M' ? 'Finish at marathon pace' : ZNAME[z], v: pace(P[z]), u: 'per mile' });
   });
   if (d.type === 'strides') rows.push({ k: 'R', p: EFF.R, c: '', t: '6 × 20 s', sub: 'Strides · walk back', v: 'quick', u: 'and relaxed' });
   if (d.type === 'hillsprints') rows.push({ k: 'R', p: EFF.R, c: '', t: '8 × 10 s', sub: 'Hill sprints · walk down', v: 'hard', u: 'effort' });
   if (d.tags.includes('strength')) rows.push({ k: '+', p: 0, c: 'gray', t: 'Strength', sub: '20–30 min · squats, lunges, core', v: '', u: '' });
   if (!rows.length) return '';
-  return `<div class="rows">${rows.map(r => `<div class="r"><span class="ring ${r.c}" style="--p:${r.p}"><i>${r.k}</i></span><div class="r-txt"><b>${esc(r.t)}</b><small>${esc(r.sub)}</small></div><div class="r-val">${r.v ? `<b class="num">${esc(r.v)}</b><small>${esc(r.u)}</small>` : ''}</div></div>`).join('')}</div>`;
+  return `<div class="rows">${rows.map(r => `<div class="r"><span class="ring ${r.c}" style="--p:${r.p}"><i>${r.k}</i></span><div class="r-txt"><b>${esc(r.t)}</b><small>${esc(r.sub)}</small></div><div class="r-val">${r.v ? `<b class="num">${esc(r.v)}</b><small>${esc(r.u)}</small>${r.lap ? `<small class="lap num">${esc(r.lap)}</small>` : ''}` : ''}</div></div>`).join('')}</div>`;
 }
 
 function cardHTML(d, drag) {
@@ -111,6 +112,19 @@ function cardHTML(d, drag) {
 
 function slideHTML(d) {
   if (d.type === 'rest') return '';
+  if (d.type === 'test' && S.log[d.date] !== 'done') {
+    const t = S.profile.tt?.date === d.date ? S.profile.tt.sec : 0;
+    return `<form class="tt-log" data-tt="${d.date}" novalidate>
+      <div class="tt-head"><b>Your 5K time</b><small>Resets your training paces</small></div>
+      <div class="tbox">
+        <label class="tseg"><input name="m" inputmode="numeric" pattern="[0-9]*" maxlength="2" autocomplete="off" enterkeyhint="next" value="${t ? Math.floor(t / 60) : ''}" aria-label="Minutes"><small>min</small></label>
+        <span class="tcolon">:</span>
+        <label class="tseg"><input name="s" inputmode="numeric" pattern="[0-9]*" maxlength="2" autocomplete="off" enterkeyhint="done" value="${t ? pad(t % 60) : ''}" aria-label="Seconds"><small>sec</small></label>
+      </div>
+      <p class="tt-err" role="alert" hidden></p>
+      <button type="submit" class="btn">Log time trial</button>
+    </form>`;
+  }
   const done = S.log[d.date] === 'done';
   return `<div class="slide${done ? ' done' : ''}" data-slide="${d.date}">
     <button class="knob" type="button" aria-label="${done ? 'Logged. Tap to undo' : 'Log this run'}">${done ? ICON.check : ICON.run}</button>
@@ -133,7 +147,8 @@ const head = title => `<header class="ph"><h1>${title}</h1><button class="round"
 
 function render() {
   today = localISO();
-  plan = Engine.build(S.profile, today);
+  const p = S.profile;
+  plan = Engine.build(p, p.from && p.from < today && p.raceDate > today ? p.from : today);
   if (plan.error) {
     const msg = `${head('Set up')}<button class="dpill" data-edit><span class="dp-ic">${ICON.flag}</span><div><b>${esc(plan.error)}</b><small>Your race date has passed</small></div><span class="dp-btn">Edit</span></button>`;
     ['today', 'plan', 'race'].forEach(v => $('#v-' + v).innerHTML = msg);
@@ -279,6 +294,10 @@ function renderRace() {
       ${paceRow('R', '', 'Repetition', 'Fast and relaxed', pace(P.R))}
     </div>
     <h2 class="sec-t">Race splits</h2>
+    <div class="tiles">
+      <div class="tile"><small>Miles 1–13</small><b class="num">${pace(s1 / halfKm)} <em>/mi</em></b><span>Hold back, stay even</span></div>
+      <div class="tile"><small>Miles 14–26.2</small><b class="num">${pace(s2 / halfKm)} <em>/mi</em></b><span>Squeeze, finish strong</span></div>
+    </div>
     <div class="tiles three">${splits.map(([l, km]) => `<div class="tile"><small>${l}</small><b class="num">${hms(at(km))}</b></div>`).join('')}</div>
     <h2 class="sec-t">Fuel</h2>
     <div class="tiles">
@@ -296,6 +315,19 @@ function setLog(date, val, msg) {
   if (val) S.log[date] = val; else delete S.log[date];
   save(); refresh();
   if (msg) toast(msg, () => { if (prev) S.log[date] = prev; else delete S.log[date]; save(); refresh(); });
+}
+// Save (sec > 0) or clear (sec = 0) a 5K time trial. Paces and the race prediction rebuild from it.
+function logTT(date, sec) {
+  const prevTT = S.profile.tt, prevLog = S.log[date];
+  // Paces come from the engine, so a new time needs a full rebuild, not just a redraw.
+  const rebuild = () => { save(); render(); if (!$('#ws').hidden && wsDate) fillWorkout(wsDate); };
+  if (sec) { S.profile.tt = { date, sec }; S.log[date] = 'done'; } else { delete S.profile.tt; delete S.log[date]; }
+  rebuild();
+  toast(sec ? `5K in ${mss(sec)}. Paces updated.` : 'Time trial removed', () => {
+    if (prevTT) S.profile.tt = prevTT; else delete S.profile.tt;
+    if (prevLog) S.log[date] = prevLog; else delete S.log[date];
+    rebuild();
+  });
 }
 function refresh() {
   renderToday(); renderPlan(); renderRace();
@@ -316,7 +348,7 @@ function hideToast() { $('#toast').classList.remove('show'); }
 function bindSlides(root) {
   $$('.slide', root).forEach(sl => {
     const knob = $('.knob', sl), date = sl.dataset.slide, label = $('.sl-label', sl);
-    if (sl.classList.contains('done')) { knob.addEventListener('click', () => setLog(date, null, 'Log removed')); return; }
+    if (sl.classList.contains('done')) { knob.addEventListener('click', () => workoutAt(date)?.type === 'test' ? logTT(date, 0) : setLog(date, null, 'Log removed')); return; }
     let x0 = null, dx = 0, id = null;
     const max = () => sl.clientWidth - knob.offsetWidth - 16;
     knob.addEventListener('pointerdown', e => { if (e.button) return; id = e.pointerId; x0 = e.clientX; dx = 0; try { knob.setPointerCapture(id); } catch (_) {} sl.classList.add('dragging'); });
@@ -616,8 +648,10 @@ function saveSetup(e) {
   const wk = num('f-wk'), lg = num('f-long');
   if (!(wk >= 0 && wk <= 150)) return err('Enter your miles per week, from 0 to 150.', 'l-f-wk');
   if (!(lg >= 0 && lg <= 30)) return err('Enter your longest recent run, from 0 to 30 miles.', 'l-f-long');
+  const old = S.profile, sameRace = old.raceDate === raceDate && !old.example;
+  const sameRecent = (old.recentDist || 0) === rdist && Math.round(old.recentSec || 0) === Math.round(rsec);
   S.profile = {
-    example: false, name: v('f-name').slice(0, 40), age, sex: S.profile.sex || 'm', heightCm: Math.round(heightCm), weightKg: Math.round(lb / LB * 10) / 10,
+    example: false, from: sameRace && old.from ? old.from : today, tt: sameRace && sameRecent ? old.tt : undefined, name: v('f-name').slice(0, 40), age, sex: S.profile.sex || 'm', heightCm: Math.round(heightCm), weightKg: Math.round(lb / LB * 10) / 10,
     restHr: 0, maxHr: 0, goalSec, raceDate, recentDist: rdist, recentSec: rsec, weeklyKm: wk * MI, longestKm: lg * MI,
     exp: rad('f-exp') || 'mid', days: +(rad('f-days') || 5), longDay: +(rad('f-lday') || 6), units: 'mi',
   };
@@ -670,6 +704,22 @@ document.addEventListener('click', e => {
   if ((el = e.target.closest('[data-close]'))) return closeLayer(el.closest('.layer'));
   if ((el = e.target.closest('[data-open]'))) return openWorkout(el.dataset.open);
 });
+document.addEventListener('submit', e => {
+  const f = e.target.closest('.tt-log'); if (!f) return;
+  e.preventDefault();
+  const m = +f.m.value || 0, sec = m * 60 + (+f.s.value || 0), V = sec ? Engine.vdot(5000, sec) : 0;
+  const bad = $('.tt-err', f);
+  if (!(V >= 15 && V <= 90) || +f.s.value > 59) { bad.textContent = sec ? 'That time doesn’t look right for a 5K.' : 'Enter your time, like 22:30.'; bad.hidden = false; f.classList.add('bad'); return; }
+  document.activeElement?.blur?.();
+  logTT(f.dataset.tt, sec);
+});
+document.addEventListener('input', e => {
+  const f = e.target.closest('.tt-log'); if (!f) return;
+  e.target.value = e.target.value.replace(/\D/g, '').slice(0, 2);
+  f.classList.remove('bad'); $('.tt-err', f).hidden = true;
+  if (e.target.name === 'm' && e.target.value.length === 2) f.s.focus();
+});
+document.addEventListener('focusin', e => { if (e.target.closest?.('.tt-log input')) setTimeout(() => { try { e.target.select(); } catch (_) {} }, 0); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') { const L = $$('.layer.open').pop(); if (L) closeLayer(L); } });
 window.addEventListener('hashchange', () => show(location.hash.slice(1), true));
 document.addEventListener('visibilitychange', () => { if (!document.hidden && localISO() !== today) { selDay = null; render(); } });
